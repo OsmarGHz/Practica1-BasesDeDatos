@@ -9,6 +9,8 @@
 #include <ctime>
 #include <limits>
 #include <algorithm>
+#include <cctype>
+#include <clocale>
 
 #ifdef _WIN32
     #include <windows.h>
@@ -25,7 +27,8 @@ enum class Color {
     Blue,
     Orange,
     Green,
-    Red
+    Red,
+    Yellow
 };
 
 struct TermSize {
@@ -57,6 +60,8 @@ string useColorAnsi(Color color) {
             return "\033[32m";
         case Color::Red:
             return "\033[31m";
+        case Color::Yellow:
+            return "\033[33m";
         case Color::Default:
         default:
             return "\033[0m";
@@ -133,14 +138,187 @@ void imprimirCentrado(const string & text) {
     cout << string(pad, ' ') << text << "\n";
 }
 
-void printLoSentimos(string mensaje){
-    cout << setParpadeoAnsi(true) << useColorAnsi(Color::Red)
-             << "\n\t\t--- Lo sentimos, " + mensaje + "---\n"
-             << setParpadeoAnsi(false) << useColorAnsi(Color::Default);
+void imprimirCentradoInline(const string & text) {
+    TermSize ts = getTermSize();
+    int pad = (ts.cols - static_cast <int> (text.size())) / 2;
+    if (pad < 0) {
+        pad = 0;
+    }
+    cout << string(pad, ' ') << text;
 }
 
-string printAviso(string mensaje){
-    return "\n\t\t--- Aviso: " + mensaje + " ---\n";
+void renderLineaCentradaInline(const string & text, Color color, const string & estilo) {
+    TermSize ts = getTermSize();
+    int pad = (ts.cols - static_cast<int>(text.size())) / 2;
+    if (pad < 0) {
+        pad = 0;
+    }
+    cout << "\r" << string(pad, ' ') << estilo << useColorAnsi(color) << text
+         << useColorAnsi(Color::Default) << "\033[K" << flush;
+}
+
+void limpiarLineaActual() {
+    cout << "\r\033[K" << flush;
+}
+
+void limpiarPantalla() {
+    cout << "\033[2J\033[H" << flush;
+}
+
+void fadeTextoCentrado(const string & text, Color color, int totalMs, bool fadeIn) {
+    vector<string> estilos = { "\033[2m", "\033[22m", "\033[1m" };
+    if (!fadeIn) {
+        reverse(estilos.begin(), estilos.end());
+    }
+
+    int pasos = static_cast<int>(estilos.size());
+    int delayMs = pasos > 0 ? totalMs / pasos : totalMs;
+    for (const auto & estilo : estilos) {
+        renderLineaCentradaInline(text, color, estilo);
+        this_thread::sleep_for(std::chrono::milliseconds(delayMs));
+    }
+    cout << "\033[22m" << flush;
+}
+
+void printLoSentimos(string mensaje){
+    cout << "\n";
+    cout << setParpadeoAnsi(true) << useColorAnsi(Color::Red);
+    imprimirCentrado("--- Lo sentimos, " + mensaje + " ---");
+    cout << setParpadeoAnsi(false) << useColorAnsi(Color::Default);
+}
+
+void printAviso(string mensaje){
+    cout << "\n";
+    cout << setParpadeoAnsi(true) << useColorAnsi(Color::Yellow);
+    imprimirCentrado("--- Aviso: " + mensaje + " ---");
+    cout << setParpadeoAnsi(false) << useColorAnsi(Color::Default);
+}
+
+void printSuccess(string mensaje){
+    cout << "\n";
+    cout << setParpadeoAnsi(true) << useColorAnsi(Color::Green);
+    imprimirCentrado("--- Éxito! " + mensaje + " ---");
+    cout << setParpadeoAnsi(false) << useColorAnsi(Color::Default);
+}
+
+// Funciones para leer tipos de datos de forma segura
+
+bool leerShortSeguro(const string & prompt, short & valor) {
+    imprimirCentradoInline(prompt);
+    if (!(cin >> valor)) {
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        return false;
+    }
+    return true;
+}
+
+bool leerIntSeguro(const string & prompt, int & valor) {
+    imprimirCentradoInline(prompt);
+    if (!(cin >> valor)) {
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        return false;
+    }
+    return true;
+}
+
+string leerLineaSeguro(const string & prompt) {
+    imprimirCentradoInline(prompt);
+    string valor;
+    getline(cin >> ws, valor);
+    return valor;
+}
+
+string leerLineaPermitirVacio(const string & prompt) {
+    imprimirCentradoInline(prompt);
+    string valor;
+    getline(cin, valor);
+    return valor;
+}
+
+bool contienePipe(const string & texto) {
+    return texto.find('|') != string::npos;
+}
+
+string leerLineaSeguroSinPipe(const string & prompt) {
+    while (true) {
+        string valor = leerLineaSeguro(prompt);
+        if (!contienePipe(valor)) {
+            return valor;
+        }
+        printAviso("El caracter '|' no esta permitido");
+    }
+}
+
+string leerLineaPermitirVacioSinPipe(const string & prompt) {
+    while (true) {
+        string valor = leerLineaPermitirVacio(prompt);
+        if (valor.empty() || !contienePipe(valor)) {
+            return valor;
+        }
+        printAviso("El caracter '|' no esta permitido");
+    }
+}
+
+bool asegurarArchivoExiste(const string & rutaArchivo) {
+    ifstream entrada(rutaArchivo);
+    if (entrada.is_open()) {
+        return true;
+    }
+
+    ofstream salida(rutaArchivo, ios::app);
+    return salida.is_open();
+}
+
+bool esFechaValidaDDMMYYYY(const string & fecha) {
+    if (fecha.size() != 10 || fecha[2] != '/' || fecha[5] != '/') {
+        return false;
+    }
+
+    for (size_t i = 0; i < fecha.size(); ++i) {
+        if (i == 2 || i == 5) {
+            continue;
+        }
+        if (!isdigit(static_cast<unsigned char>(fecha[i]))) {
+            return false;
+        }
+    }
+
+    int dia = stoi(fecha.substr(0, 2));
+    int mes = stoi(fecha.substr(3, 2));
+    int anio = stoi(fecha.substr(6, 4));
+
+    if (anio < 1 || mes < 1 || mes > 12 || dia < 1) {
+        return false;
+    }
+
+    int diasPorMes[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+    bool esBisiesto = (anio % 4 == 0 && anio % 100 != 0) || (anio % 400 == 0);
+    if (esBisiesto) {
+        diasPorMes[1] = 29;
+    }
+
+    if (dia > diasPorMes[mes - 1]) {
+        return false;
+    }
+
+    return true;
+}
+
+string leerFechaValida(const string & prompt, bool permitirVacio) {
+    while (true) {
+        imprimirCentradoInline(prompt);
+        string entrada;
+        getline(cin, entrada);
+        if (permitirVacio && entrada.empty()) {
+            return "";
+        }
+        if (esFechaValidaDDMMYYYY(entrada)) {
+            return entrada;
+        }
+        printAviso("Fecha invalida, use DD/MM/YYYY");
+    }
 }
 
 // Funciones de Leer empleados
@@ -192,7 +370,7 @@ vector<Empleado> leerEmpleados(const string & rutaArchivo) {
         if (parseEmpleadoLinea(linea, emp)) {
             empleados.push_back(emp);
         } else if (!linea.empty()) {
-            cout << printAviso("Linea invalida en archivo (linea " + to_string(numLinea) + ")");
+            printAviso("Linea invalida en archivo (linea " + to_string(numLinea) + ")");
         }
     }
 
@@ -221,10 +399,13 @@ bool guardarEmpleados(const string & rutaArchivo, const vector<Empleado> & emple
 }
 
 int obtenerSiguienteId(const vector<Empleado> & empleados) {
-    if (empleados.empty()) {
-        return 1;
+    int maxId = 0;
+    for (const auto & emp : empleados) {
+        if (emp.id > maxId) {
+            maxId = emp.id;
+        }
     }
-    return empleados.back().id + 1;
+    return maxId + 1;
 }
 
 string obtenerFechaLocal() {
@@ -249,27 +430,22 @@ void altaEmpleado(const string & rutaArchivo) {
     nuevo.id = obtenerSiguienteId(empleados);
     nuevo.fechaAlta = obtenerFechaLocal();
 
-    cout << "\n--- Alta de empleado ---\n";
-    cout << "Nombre: ";
-    cin.ignore(numeric_limits<streamsize>::max(), '\n'); //Limpiar el buffer antes de usar getline
-    getline(cin, nuevo.nombre);
+    cout << "\n";
+    imprimirCentrado("--- Alta de empleado ---");
+    nuevo.nombre = leerLineaSeguroSinPipe("Nombre: ");
+    nuevo.apellidoP = leerLineaSeguroSinPipe("Apellido paterno: ");
+    nuevo.apellidoM = leerLineaSeguroSinPipe("Apellido materno: ");
 
-    cout << "Apellido paterno: ";
-    getline(cin, nuevo.apellidoP);
+    nuevo.fechaNac = leerFechaValida("Fecha de nacimiento (DD/MM/YYYY): ", false);
 
-    cout << "Apellido materno: ";
-    getline(cin, nuevo.apellidoM);
-
-    cout << "Fecha de nacimiento (DD/MM/YYYY): ";
-    getline(cin, nuevo.fechaNac);
-
-    cout << "Direccion: ";
-    getline(cin, nuevo.direccion);
+    nuevo.direccion = leerLineaSeguroSinPipe("Direccion: ");
 
     empleados.push_back(nuevo);
 
+    limpiarPantalla();
+
     if (guardarEmpleados(rutaArchivo, empleados)) {
-        cout << printAviso("Empleado agregado con ID " + to_string(nuevo.id));
+        printSuccess("Empleado agregado con ID " + to_string(nuevo.id));
     } else {
         printLoSentimos("no se pudo guardar el archivo");
     }
@@ -328,36 +504,42 @@ vector<int> buscarIndicesPorTexto(const vector<Empleado> & empleados, const stri
 
 void mostrarEmpleados(const vector<Empleado> & empleados) {
     if (empleados.empty()) {
-        cout << printAviso("No hay empleados para mostrar");
+        printAviso("No hay empleados para mostrar");
         return;
     }
 
-    cout << "\n--- Lista de empleados ---\n";
+    cout << "\n";
+    imprimirCentrado("--- Lista de empleados ---");
     for (const auto & emp : empleados) {
-        cout << "ID: " << emp.id << "\n";
-        cout << "Nombre: " << emp.nombre << " " << emp.apellidoP << " " << emp.apellidoM << "\n";
-        cout << "Fecha Nac.: " << emp.fechaNac << "\n";
-        cout << "Direccion: " << emp.direccion << "\n";
-        cout << "Fecha Alta: " << emp.fechaAlta << "\n";
-        cout << "-------------------------\n";
+        imprimirCentrado("ID: " + to_string(emp.id));
+        imprimirCentrado("Nombre: " + emp.nombre + " " + emp.apellidoP + " " + emp.apellidoM);
+        imprimirCentrado("Fecha Nac.: " + emp.fechaNac);
+        imprimirCentrado("Direccion: " + emp.direccion);
+        imprimirCentrado("Fecha Alta: " + emp.fechaAlta);
+        imprimirCentrado("-------------------------");
+    }
+}
+
+void imprimirSubmenuCentrado(const string & titulo, const vector<string> & opciones) {
+    cout << "\n";
+    imprimirCentrado(titulo);
+    for (const auto & opcion : opciones) {
+        imprimirCentrado(opcion);
     }
 }
 
 void consultaEmpleados(const string & rutaArchivo) {
     while (true) {
-        cout << "\n--- Consulta de empleados ---\n";
-        cout << "1. Buscar por nombre/apellido\n";
-        cout << "2. Buscar por ID\n";
-        cout << "3. Mostrar todos\n";
-        cout << "0. Volver\n";
-        cout << "Opcion: ";
-
+        imprimirSubmenuCentrado("--- Consulta de empleados ---", {
+            "1. Buscar por nombre/apellido",
+            "2. Buscar por ID",
+            "3. Mostrar todos",
+            "0. Volver"
+        });
         short opcion = 0;
-        cin >> opcion;
-        if (!cin) {
-            cin.clear();
-            cin.ignore(numeric_limits<streamsize>::max(), '\n');
-            cout << printAviso("Entrada invalida");
+        if (!leerShortSeguro("Opcion: ", opcion)) {
+            limpiarPantalla();
+            printLoSentimos("Entrada invalida");
             continue;
         }
 
@@ -365,10 +547,7 @@ void consultaEmpleados(const string & rutaArchivo) {
 
         switch (opcion) {
             case 1: {
-                cout << "Texto a buscar: ";
-                cin.ignore(numeric_limits<streamsize>::max(), '\n');
-                string texto;
-                getline(cin, texto);
+                string texto = leerLineaSeguro("Texto a buscar: ");
                 vector<int> indices = buscarIndicesPorTexto(empleados, texto);
                 vector<Empleado> resultados;
                 for (int idx : indices) {
@@ -378,13 +557,9 @@ void consultaEmpleados(const string & rutaArchivo) {
                 break;
             }
             case 2: {
-                cout << "ID: ";
                 int id = 0;
-                cin >> id;
-                if (!cin) {
-                    cin.clear();
-                    cin.ignore(numeric_limits<streamsize>::max(), '\n');
-                    cout << printAviso("ID invalido");
+                if (!leerIntSeguro("ID: ", id)) {
+                    printLoSentimos("ID invalido");
                     break;
                 }
 
@@ -392,7 +567,8 @@ void consultaEmpleados(const string & rutaArchivo) {
                 if (idx >= 0) {
                     mostrarEmpleados(vector<Empleado>{empleados[idx]});
                 } else {
-                    cout << printAviso("No se encontro empleado con ese ID");
+                    limpiarPantalla();
+                    printLoSentimos("No se encontro empleado con ese ID");
                 }
                 break;
             }
@@ -400,8 +576,10 @@ void consultaEmpleados(const string & rutaArchivo) {
                 mostrarEmpleados(empleados);
                 break;
             case 0:
+                limpiarPantalla();
                 return;
             default:
+                limpiarPantalla();
                 printLoSentimos("opcion invalida");
         }
     }
@@ -409,18 +587,15 @@ void consultaEmpleados(const string & rutaArchivo) {
 
 void bajaEmpleado(const string & rutaArchivo) {
     while (true) {
-        cout << "\n--- Baja de empleado ---\n";
-        cout << "1. Dar de baja por ID\n";
-        cout << "2. Dar de baja por nombre/apellido\n";
-        cout << "0. Volver\n";
-        cout << "Opcion: ";
-
+        imprimirSubmenuCentrado("--- Baja de empleado ---", {
+            "1. Dar de baja por ID",
+            "2. Dar de baja por nombre/apellido",
+            "0. Volver"
+        });
         short opcion = 0;
-        cin >> opcion;
-        if (!cin) {
-            cin.clear();
-            cin.ignore(numeric_limits<streamsize>::max(), '\n');
-            cout << printAviso("Entrada invalida");
+        if (!leerShortSeguro("Opcion: ", opcion)) {
+            limpiarPantalla();
+            printLoSentimos("Entrada invalida");
             continue;
         }
 
@@ -428,38 +603,34 @@ void bajaEmpleado(const string & rutaArchivo) {
 
         switch (opcion) {
             case 1: {
-                cout << "ID: ";
                 int id = 0;
-                cin >> id;
-                if (!cin) {
-                    cin.clear();
-                    cin.ignore(numeric_limits<streamsize>::max(), '\n');
-                    cout << printAviso("ID invalido");
+                if (!leerIntSeguro("ID: ", id)) {
+                    limpiarPantalla();
+                    printLoSentimos("ID invalido");
                     break;
                 }
-
+                limpiarPantalla();
                 int idx = buscarIndicePorId(empleados, id);
                 if (idx < 0) {
-                    cout << printAviso("No se encontro empleado con ese ID");
+                    printLoSentimos("No se encontro empleado con ese ID");
                     break;
                 }
 
                 empleados.erase(empleados.begin() + idx);
+                
                 if (guardarEmpleados(rutaArchivo, empleados)) {
-                    cout << printAviso("Empleado eliminado");
+                    printAviso("Empleado eliminado");
                 } else {
                     printLoSentimos("no se pudo guardar el archivo");
                 }
                 break;
             }
             case 2: {
-                cout << "Texto a buscar: ";
-                cin.ignore(numeric_limits<streamsize>::max(), '\n');
-                string texto;
-                getline(cin, texto);
+                string texto = leerLineaSeguro("Texto a buscar: ");
                 vector<int> indices = buscarIndicesPorTexto(empleados, texto);
                 if (indices.empty()) {
-                    cout << printAviso("No hay coincidencias");
+                    limpiarPantalla();
+                    printAviso("No hay coincidencias");
                     break;
                 }
 
@@ -467,21 +638,20 @@ void bajaEmpleado(const string & rutaArchivo) {
                 for (int idx : indices) {
                     resultados.push_back(empleados[idx]);
                 }
+                limpiarPantalla();
                 mostrarEmpleados(resultados);
 
-                cout << "ID a eliminar: ";
                 int id = 0;
-                cin >> id;
-                if (!cin) {
-                    cin.clear();
-                    cin.ignore(numeric_limits<streamsize>::max(), '\n');
-                    cout << printAviso("ID invalido");
+                if (!leerIntSeguro("ID a eliminar: ", id)) {
+                    limpiarPantalla();
+                    printLoSentimos("ID invalido");
                     break;
                 }
 
                 int idx = buscarIndicePorId(empleados, id);
                 if (idx < 0) {
-                    cout << printAviso("No se encontro empleado con ese ID");
+                    limpiarPantalla();
+                    printLoSentimos("No se encontro empleado con ese ID");
                     break;
                 }
 
@@ -494,19 +664,22 @@ void bajaEmpleado(const string & rutaArchivo) {
                 }
 
                 if (!permitido) {
-                    cout << printAviso("Ese ID no esta en los resultados");
+                    limpiarPantalla();
+                    printAviso("Ese ID no esta en los resultados");
                     break;
                 }
 
                 empleados.erase(empleados.begin() + idx);
+                limpiarPantalla();
                 if (guardarEmpleados(rutaArchivo, empleados)) {
-                    cout << printAviso("Empleado eliminado");
+                    printAviso("Empleado eliminado");
                 } else {
                     printLoSentimos("no se pudo guardar el archivo");
                 }
                 break;
             }
             case 0:
+                limpiarPantalla();
                 return;
             default:
                 printLoSentimos("opcion invalida");
@@ -516,88 +689,79 @@ void bajaEmpleado(const string & rutaArchivo) {
 
 void modificarEmpleado(const string & rutaArchivo) {
     while (true) {
-        cout << "\n--- Modificacion de empleado ---\n";
-        cout << "1. Modificar por ID\n";
-        cout << "2. Modificar por nombre/apellido\n";
-        cout << "0. Volver\n";
-        cout << "Opcion: ";
-
+        imprimirSubmenuCentrado("--- Modificacion de empleado ---", {
+            "1. Modificar por ID",
+            "2. Modificar por nombre/apellido",
+            "0. Volver"
+        });
         short opcion = 0;
-        cin >> opcion;
-        if (!cin) {
-            cin.clear();
-            cin.ignore(numeric_limits<streamsize>::max(), '\n');
-            cout << printAviso("Entrada invalida");
+        if (!leerShortSeguro("Opcion: ", opcion)) {
+            limpiarPantalla();
+            printLoSentimos("Entrada invalida");
             continue;
         }
 
         vector<Empleado> empleados = leerEmpleados(rutaArchivo);
         if (empleados.empty()) {
-            cout << printAviso("No hay empleados registrados");
+            limpiarPantalla();
+            printAviso("No hay empleados registrados");
             continue;
         }
 
         auto editarCampos = [](Empleado & emp) {
             string entrada;
-            cout << "\n--- Modificar empleado ID " << emp.id << " ---\n";
+            limpiarPantalla();
+            imprimirCentrado("--- Modificar empleado ID " + to_string(emp.id) + " ---");
 
-            cout << "Nombre (" << emp.nombre << "): ";
-            getline(cin, entrada);
+            entrada = leerLineaPermitirVacioSinPipe("Nombre (" + emp.nombre + ") [dejar vacio para mantener]: ");
             if (!entrada.empty()) emp.nombre = entrada;
 
-            cout << "Apellido paterno (" << emp.apellidoP << "): ";
-            getline(cin, entrada);
+            entrada = leerLineaPermitirVacioSinPipe("Apellido paterno (" + emp.apellidoP + ") [dejar vacio para mantener]: ");
             if (!entrada.empty()) emp.apellidoP = entrada;
 
-            cout << "Apellido materno (" << emp.apellidoM << "): ";
-            getline(cin, entrada);
+            entrada = leerLineaPermitirVacioSinPipe("Apellido materno (" + emp.apellidoM + ") [dejar vacio para mantener]: ");
             if (!entrada.empty()) emp.apellidoM = entrada;
 
-            cout << "Fecha de nacimiento (" << emp.fechaNac << "): ";
-            getline(cin, entrada);
-            if (!entrada.empty()) emp.fechaNac = entrada;
+            string nuevaFecha = leerFechaValida("Fecha de nacimiento (" + emp.fechaNac + ") [dejar vacio para mantener]: ", true);
+            if (!nuevaFecha.empty()) emp.fechaNac = nuevaFecha;
 
-            cout << "Direccion (" << emp.direccion << "): ";
-            getline(cin, entrada);
+            entrada = leerLineaPermitirVacioSinPipe("Direccion (" + emp.direccion + ") [dejar vacio para mantener]: ");
             if (!entrada.empty()) emp.direccion = entrada;
         };
 
         switch (opcion) {
             case 1: {
-                cout << "ID: ";
                 int id = 0;
-                cin >> id;
-                if (!cin) {
-                    cin.clear();
-                    cin.ignore(numeric_limits<streamsize>::max(), '\n');
-                    cout << printAviso("ID invalido");
+                if (!leerIntSeguro("ID: ", id)) {
+                    limpiarPantalla();
+                    printLoSentimos("ID invalido");
                     break;
                 }
 
                 int idx = buscarIndicePorId(empleados, id);
                 if (idx < 0) {
-                    cout << printAviso("No se encontro empleado con ese ID");
+                    limpiarPantalla();
+                    printLoSentimos("No se encontro empleado con ese ID");
                     break;
                 }
 
                 cin.ignore(numeric_limits<streamsize>::max(), '\n');
                 editarCampos(empleados[idx]);
 
+                limpiarPantalla();
                 if (guardarEmpleados(rutaArchivo, empleados)) {
-                    cout << printAviso("Empleado actualizado");
+                    printSuccess("Empleado actualizado");
                 } else {
                     printLoSentimos("no se pudo guardar el archivo");
                 }
                 break;
             }
             case 2: {
-                cout << "Texto a buscar: ";
-                cin.ignore(numeric_limits<streamsize>::max(), '\n');
-                string texto;
-                getline(cin, texto);
+                string texto = leerLineaSeguro("Texto a buscar: ");
                 vector<int> indices = buscarIndicesPorTexto(empleados, texto);
                 if (indices.empty()) {
-                    cout << printAviso("No hay coincidencias");
+                    limpiarPantalla();
+                    printAviso("No hay coincidencias");
                     break;
                 }
 
@@ -607,19 +771,17 @@ void modificarEmpleado(const string & rutaArchivo) {
                 }
                 mostrarEmpleados(resultados);
 
-                cout << "ID a modificar: ";
                 int id = 0;
-                cin >> id;
-                if (!cin) {
-                    cin.clear();
-                    cin.ignore(numeric_limits<streamsize>::max(), '\n');
-                    cout << printAviso("ID invalido");
+                if (!leerIntSeguro("ID a modificar: ", id)) {
+                    limpiarPantalla();
+                    printLoSentimos("ID invalido");
                     break;
                 }
 
                 int idx = buscarIndicePorId(empleados, id);
                 if (idx < 0) {
-                    cout << printAviso("No se encontro empleado con ese ID");
+                    limpiarPantalla();
+                    printAviso("No se encontro empleado con ese ID");
                     break;
                 }
 
@@ -632,21 +794,23 @@ void modificarEmpleado(const string & rutaArchivo) {
                 }
 
                 if (!permitido) {
-                    cout << printAviso("Ese ID no esta en los resultados");
+                    limpiarPantalla();
+                    printAviso("Ese ID no esta en los resultados");
                     break;
                 }
 
                 cin.ignore(numeric_limits<streamsize>::max(), '\n');
                 editarCampos(empleados[idx]);
-
+                limpiarPantalla();
                 if (guardarEmpleados(rutaArchivo, empleados)) {
-                    cout << printAviso("Empleado actualizado");
+                    printSuccess("Empleado actualizado");
                 } else {
                     printLoSentimos("no se pudo guardar el archivo");
                 }
                 break;
             }
             case 0:
+                limpiarPantalla();
                 return;
             default:
                 printLoSentimos("opcion invalida");
@@ -657,62 +821,77 @@ void modificarEmpleado(const string & rutaArchivo) {
 //Interfaz
 
 void barraDeCarga() {
-    cout << "\n\n";
+    cout << "\n";
     AnsiStyleGuard style_guard(true);
     for (int i = 0; i <= 100; ++i) {
-        cout << "\r"; // Retorno de carro que vuelve al inicio de la linea sin bajar
-
-        cout << useColorAnsi(Color::Cyan) << "["; // Color Cyan
-        
         int pos = i / 2;
+        string barra = "[";
         for (int j = 0; j < 50; ++j) {
-            if (j < pos) cout << "=";
-            else if (j == pos) cout << ">";
-            else cout << " ";
+            if (j < pos) barra += "=";
+            else if (j == pos) barra += ">";
+            else barra += " ";
         }
-        
-        cout << "] " << i << "%" << useColorAnsi(Color::Default); // Cerrar color
-        cout << flush;
+        barra += "] " + to_string(i) + "%";
+
+        renderLineaCentradaInline(barra, Color::Cyan, "");
         
         // Simular trabajo
         this_thread::sleep_for(std::chrono::milliseconds(30));
     }
-    cout << "\n\n" << "\033[1m" << useColorAnsi(Color::Green) << "CARGA COMPLETA!"
-         << useColorAnsi(Color::Default) << "\n";
+    fadeTextoCentrado("CARGA COMPLETA!", Color::Green, 600, true);
+    fadeTextoCentrado("CARGA COMPLETA!", Color::Green, 600, false);
+    limpiarLineaActual();
 }
 
-string printBienvenida(){
+string textBienvenida(){
     return "\n\t\t\t\tBIENVENIDO AL\n\t\t\tSISTEMA DE GESTION DE EMPLEADOS\n\n";
 }
 
-string printMenu(){
-    return "1. Dar de alta empleado\n2. Dar de baja empleado\n3. Consulta\n4. Modificacion\n0. Salir\n";
+void imprimirMenuCentrado(){
+    cout << "\n";
+    imprimirCentrado("1. Dar de alta empleado");
+    imprimirCentrado("2. Dar de baja empleado");
+    imprimirCentrado("3. Consulta");
+    imprimirCentrado("4. Modificacion");
+    imprimirCentrado("0. Salir");
 }
 
 void menuCiclado(const string & rutaArchivo){
     while(true){
-        cout << printMenu();
-        short opcion;
-        cin >> opcion;
+        imprimirMenuCentrado();
+        short opcion = 0;
+        if (!leerShortSeguro("Opcion: ", opcion)) {
+            printLoSentimos("Entrada invalida");
+            continue;
+        }
         switch(opcion){
             case 1:
+                limpiarPantalla();
                 altaEmpleado(rutaArchivo);
                 break;
             case 2:
+                limpiarPantalla();
                 bajaEmpleado(rutaArchivo);
                 break;
             case 3:
+                limpiarPantalla();
                 consultaEmpleados(rutaArchivo);
                 break;
             case 4:
+                limpiarPantalla();
                 modificarEmpleado(rutaArchivo);
                 break;
             case 0:
-                cout << useColorAnsi(Color::Green) << "\nGracias, gracias cuate, por usar mi sistema.\nNos vemos!" 
-                     << useColorAnsi(Color::Default) << "\n";
+                limpiarPantalla();
+                fadeTextoCentrado("Gracias, gracias, por usar mi sistema.", Color::Green, 600, true);
+                fadeTextoCentrado("Gracias, gracias, por usar mi sistema.", Color::Green, 600, false);
+                fadeTextoCentrado("Nos vemos!", Color::Green, 600, true);
+                fadeTextoCentrado("Nos vemos!", Color::Green, 600, false);
+                limpiarPantalla();
                 return;
             default:
                 printLoSentimos("opcion invalida");
+                opcion = -1; //Con esto evitamos un ciclo sin fin
         }
     }
 }
@@ -720,24 +899,26 @@ void menuCiclado(const string & rutaArchivo){
 int main(){
     #ifdef _WIN32
         enableSecuenciasVT();
+        SetConsoleOutputCP(CP_UTF8);
+        SetConsoleCP(CP_UTF8);
     #endif
+
+    setlocale(LC_ALL, "es_MX.UTF-8");
 
     AnsiStyleGuard global_style_guard;
 
+    limpiarPantalla();
+
     barraDeCarga();
-    cout << useColorAnsi(Color::Blue);
+    cout << useColorAnsi(Color::Cyan);
     imprimirCentrado("BIENVENIDO AL");
     imprimirCentrado("SISTEMA DE GESTION DE EMPLEADOS");
     cout << useColorAnsi(Color::Default) << "\n";
-
-    cout << useColorAnsi(Color::Green);
-    imprimirCentrado("Operacion exitosa :)");
-    cout << useColorAnsi(Color::Default);
-    const string rutaArchivo = "C:\\empleados.txt";
-    fstream file(rutaArchivo);
-    // if(!file.is_open()){
-    //     printLoSentimos("no se pudo abrir el archivo");
-    // }
+    const string rutaArchivo = "empleados.txt";
+    if (!asegurarArchivoExiste(rutaArchivo)) {
+        printLoSentimos("no se pudo abrir el archivo");
+        return 1;
+    }
 
     menuCiclado(rutaArchivo);
 }
