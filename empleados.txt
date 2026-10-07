@@ -1,4 +1,1 @@
-2|Maria|Gomez|Lopez|10/02/2000|Calle 2|10/02/2026
-3|Maria|Gomez|Lopez|10/02/2000|Calle 1|10/02/2026
-4|Asimiro|Elmo|a|12/12/2012|Vizcainas|10/02/2026
-5|Alan|Turing|Alemano|11/11/1911|Apodaca Noseque 11|10/02/2026
+2|Emilio|Nava|Osorio|06/12/2024|Rotonda noseque|10/02/2026

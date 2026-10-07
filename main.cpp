@@ -616,12 +616,20 @@ void bajaEmpleado(const string & rutaArchivo) {
                     break;
                 }
 
-                empleados.erase(empleados.begin() + idx);
+                short decision = 0;
+                //Mostrar empleado a eliminar
+                mostrarEmpleados(vector<Empleado>{empleados[idx]});
+                if(!leerShortSeguro("Estas seguro de eliminar a este empleado (1 = Si, 0 = No): ", decision) || decision != 1) {
+                    limpiarPantalla();
+                    printAviso("Operacion cancelada");
+                }else{
+                    empleados.erase(empleados.begin() + idx);
                 
-                if (guardarEmpleados(rutaArchivo, empleados)) {
-                    printAviso("Empleado eliminado");
-                } else {
-                    printLoSentimos("no se pudo guardar el archivo");
+                    if (guardarEmpleados(rutaArchivo, empleados)) {
+                        printAviso("Empleado eliminado");
+                    } else {
+                        printLoSentimos("no se pudo guardar el archivo");
+                    }
                 }
                 break;
             }
@@ -914,6 +922,7 @@ int main(){
     imprimirCentrado("BIENVENIDO AL");
     imprimirCentrado("SISTEMA DE GESTION DE EMPLEADOS");
     cout << useColorAnsi(Color::Default) << "\n";
+    
     const string rutaArchivo = "empleados.txt";
     if (!asegurarArchivoExiste(rutaArchivo)) {
         printLoSentimos("no se pudo abrir el archivo");
